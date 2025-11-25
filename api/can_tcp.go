@@ -7,9 +7,12 @@ import (
 	"log"
 	"net"
 	"time"
+
+	"github.com/sigurn/crc16"
 )
 
 type CANClient struct {
+    stationId  string
     conn       net.Conn
     addr       string
     writeQueue chan []byte
@@ -18,10 +21,11 @@ type CANClient struct {
 	isReady    chan struct{}
 }
 
-func NewCANClient(ip, port string) *CANClient {
+func NewCANClient(stationId, ip, port string) *CANClient {
     ctx, cancel := context.WithCancel(context.Background())
 
     client := &CANClient{
+        stationId:  stationId,
         addr:       net.JoinHostPort(ip, port),
         writeQueue: make(chan []byte, 100), // buffered channel
         ctx:        ctx,
@@ -64,21 +68,28 @@ func (c *CANClient) run() {
 }
 
 func (c *CANClient) connect() error {
-    laddr, err := net.ResolveUDPAddr("udp", c.addr) 
+    // 1. 使用 net.Dial。這會自動選擇一個本地的隨機埠來發送和接收數據。
+    // c.addr 必須是遠端目標的 IP:Port (例如 "192.168.1.100:8080" 或 "127.0.0.1:8080")
+    conn, err := net.Dial("udp", c.addr)
     if err != nil {
-        return err
-    }
-    raddr, err := net.ResolveUDPAddr("udp", c.addr)
-    if err != nil {
-        return err
-    }
-
-    conn, err := net.DialUDP("udp", laddr, raddr)
-    if err != nil {
+        log.Printf("Dial failed: %v\n", err)
         return err
     }
 
     c.conn = conn
+    
+    // 處理連線就緒通知 (保持您先前新增的邏輯)
+    select {
+    case <-c.isReady:
+        // 已經關閉，通常是重連的情況，需要確保頻道再次被初始化
+        // 由於 Go Channel 關閉後無法重新打開，我們需要一個更強健的狀態機制
+        // 暫時保持不變，但請注意這是重連邏輯的潛在問題
+    default:
+        // 第一次連線成功，關閉頻道
+        close(c.isReady) 
+    }
+    
+    log.Println("Connected to device:", c.addr)
     return nil
 }
 
@@ -121,10 +132,12 @@ func (c *CANClient) writeLoop() {
 
 // Public API method
 func (c *CANClient) SendCommand(cmd string) error {
-    hexStr, err := command(cmd)
+    hexStr, err := command(c.stationId, cmd)
     if err != nil {
         return err
     }
+    
+    fmt.Printf(hexStr)
 
     bytes, err := hex.DecodeString(hexStr)
     if err != nil {
@@ -158,18 +171,71 @@ _, err = c.conn.Write(messageBytes)
 }
 
 
-func command(cmd string) (string, error){
-	startChargeHex := "01050007FF003DFB"
-	stopChargeHex := "0105000700007C0B"
-	
-	switch(cmd){
+func(c *CANClient) IntervalSendReadStatus() chan struct{}{
+    const interval = 2 * time.Second
+    ticker := time.NewTicker(interval)
+
+    stopChan := make(chan struct{})
+
+    fmt.Printf("✅ Ticker 啟動：每 %v 列印一次訊息...\n", interval)
+    fmt.Println("---------------------------------------")
+
+    go func(){
+        for {
+            select {
+                //這裡組塞 直到go時鐘發了一個訊號到 ticker.c 發送了一個訊號
+            case <-ticker.C:
+                c.SendCommand("read")
+                fmt.Printf("⏰ 任務執行: 當前時間 %s\n", time.Now().Format("15:04:05"))
+            case <-stopChan:
+                ticker.Stop()
+                fmt.Println("---------------------------------------")
+				fmt.Println("🛑 Ticker 任務安全停止。")
+				return
+            }
+        }
+    }()
+
+    return stopChan
+
+}
+
+
+
+func command(stationId, cmd string) (string, error) {
+	switch cmd {
 	case "start":
-		return startChargeHex, nil
+		return buildCommand(stationId, "050007FF00")
 	case "stop":
-		return stopChargeHex, nil
+		return buildCommand(stationId, "0500070000")
+	case "read":
+		return buildCommand(stationId, "01004000")
 	default:
-		return  "", fmt.Errorf("not found command")
+		return "", fmt.Errorf("unknown cmd")
 	}
 }
 
 
+
+var table = crc16.MakeTable(crc16.CRC16_MODBUS)
+
+func buildCommand(stationId, payload string) (string, error) {
+    fullStr := stationId + payload
+
+    // 轉 []byte
+    data, err := hex.DecodeString(fullStr)
+    if err != nil {
+        return "", fmt.Errorf("hex decode failed: %v", err)
+    }
+
+    // 計算 CRC16-MODBUS
+    crcValue := crc16.Checksum(data, table)
+
+    // 轉成大寫 HEX（4 字碼）
+    crcHex := fmt.Sprintf("%04X", crcValue)
+
+    // Little endian：低位在前
+    crcLE := crcHex[2:4] + crcHex[0:2]
+
+    return fullStr + crcLE, nil
+}
