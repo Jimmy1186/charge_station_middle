@@ -19,6 +19,7 @@ type CANClient struct {
     ctx        context.Context
     cancel     context.CancelFunc
 	isReady    chan struct{}
+    intervalStop chan struct {}
 }
 
 func NewCANClient(stationId, ip, port string) *CANClient {
@@ -38,7 +39,6 @@ func NewCANClient(stationId, ip, port string) *CANClient {
     return client
 }
 
-// Central controller goroutine
 func (c *CANClient) run() {
     for {
         err := c.connect()
@@ -49,23 +49,28 @@ func (c *CANClient) run() {
             continue
         }
 
-        // Connected successfully → run read/write loops
+        // ---- 連線成功就啟動 interval ----
+        c.startInterval()
+
         readDone := make(chan struct{})
         go c.readLoop(readDone)
         go c.writeLoop()
 
-        // Wait for disconnection or shutdown
         select {
         case <-readDone:
             log.Println("Connection lost, reconnecting...")
+            c.stopInterval()  // <-- 斷線必須停掉 interval
             c.conn.Close()
+
         case <-c.ctx.Done():
             log.Println("Shutting down CAN client...")
+            c.stopInterval()  // <-- 關閉也必須停掉 interval
             c.conn.Close()
             return
         }
     }
 }
+
 
 func (c *CANClient) connect() error {
     // 1. 使用 net.Dial。這會自動選擇一個本地的隨機埠來發送和接收數據。
@@ -171,34 +176,7 @@ _, err = c.conn.Write(messageBytes)
 }
 
 
-func(c *CANClient) IntervalSendReadStatus() chan struct{}{
-    const interval = 2 * time.Second
-    ticker := time.NewTicker(interval)
 
-    stopChan := make(chan struct{})
-
-    fmt.Printf("✅ Ticker 啟動：每 %v 列印一次訊息...\n", interval)
-    fmt.Println("---------------------------------------")
-
-    go func(){
-        for {
-            select {
-                //這裡組塞 直到go時鐘發了一個訊號到 ticker.c 發送了一個訊號
-            case <-ticker.C:
-                c.SendCommand("read")
-                fmt.Printf("⏰ 任務執行: 當前時間 %s\n", time.Now().Format("15:04:05"))
-            case <-stopChan:
-                ticker.Stop()
-                fmt.Println("---------------------------------------")
-				fmt.Println("🛑 Ticker 任務安全停止。")
-				return
-            }
-        }
-    }()
-
-    return stopChan
-
-}
 
 
 
@@ -238,4 +216,43 @@ func buildCommand(stationId, payload string) (string, error) {
     crcLE := crcHex[2:4] + crcHex[0:2]
 
     return fullStr + crcLE, nil
+}
+
+
+
+func (c *CANClient) startInterval() {
+
+    if c.intervalStop != nil {
+        return // 已經在跑了，不要重複開
+    }
+
+
+    // 如果還沒建立 stop channel，就建立
+    if c.intervalStop == nil {
+        c.intervalStop = make(chan struct{})
+    }
+
+    go func(stop <-chan struct{}) {
+        ticker := time.NewTicker(2 * time.Second)
+        log.Println("Ticker started")
+
+        for {
+            select {
+            case <-ticker.C:
+                c.SendCommand("read")
+
+            case <-stop:
+                ticker.Stop()
+                log.Println("Ticker stopped.")
+                return
+            }
+        }
+    }(c.intervalStop)
+}
+
+func (c *CANClient) stopInterval() {
+    if c.intervalStop != nil {
+        close(c.intervalStop)
+        c.intervalStop = nil
+    }
 }

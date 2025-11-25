@@ -11,13 +11,7 @@ func main(){
     // 2. 🔥 等待連線成功：確保 client.conn 已經被賦值
     client.WaitForConnection()
 
-
-    client.IntervalSendReadStatus()
-
-    // time.Sleep(12 *time.Second)
-
-    //  close(stopper)
-
+  
     // 為了讓 Goroutines 繼續運行，保持主程式不退出
     select {} 
 }
