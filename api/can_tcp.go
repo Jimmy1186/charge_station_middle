@@ -39,6 +39,7 @@ func (c *CANClient) run() {
     for {
         err := c.connect()
         if err != nil {
+            log.Println(err)
             log.Println("Reconnect in 3 seconds...")
             time.Sleep(3 * time.Second)
             continue
@@ -63,26 +64,24 @@ func (c *CANClient) run() {
 }
 
 func (c *CANClient) connect() error {
-    conn, err := net.Dial("udp", c.addr)
+    laddr, err := net.ResolveUDPAddr("udp", c.addr) 
     if err != nil {
-        log.Printf("Dial failed: %v\n", err)
         return err
     }
-    c.conn = conn
-
-    log.Println("Connected to device:", c.addr)
-    
-    // 🔥 新增：成功連線後，立即關閉 isReady 頻道，通知主程式可以發送了
-    select {
-    case <-c.isReady:
-        // 已經關閉，不做任何事 (處理重連)
-    default:
-        // 第一次連線成功，關閉頻道
-        close(c.isReady) 
+    raddr, err := net.ResolveUDPAddr("udp", c.addr)
+    if err != nil {
+        return err
     }
-    
+
+    conn, err := net.DialUDP("udp", laddr, raddr)
+    if err != nil {
+        return err
+    }
+
+    c.conn = conn
     return nil
 }
+
 
 // 新增：等待連線建立完成
 func (c *CANClient) WaitForConnection() {
