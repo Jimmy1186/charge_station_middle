@@ -8,7 +8,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/sigurn/crc16"
+	"kenmec/jimmy/charge_core/tool"
 )
 
 type CANClient struct {
@@ -109,14 +109,14 @@ func (c *CANClient) readLoop(done chan struct{}) {
     buffer := make([]byte, 1024)
 
     for {
-        n, err := c.conn.Read(buffer)
+        _, err := c.conn.Read(buffer)
         if err != nil {
             log.Println("Read error:", err)
             close(done)
             return
         }
 
-        log.Printf("Received %d bytes: %X\n", n, buffer[:n])
+      //  log.Printf("Received %d bytes: %X\n", n, buffer[:n])
     }
 }
 
@@ -137,12 +137,12 @@ func (c *CANClient) writeLoop() {
 
 // Public API method
 func (c *CANClient) SendCommand(cmd string) error {
-    hexStr, err := command(c.stationId, cmd)
+    hexStr, err := tool.Command(c.stationId, cmd)
     if err != nil {
         return err
     }
     
-    fmt.Printf(hexStr)
+  
 
     bytes, err := hex.DecodeString(hexStr)
     if err != nil {
@@ -180,43 +180,7 @@ _, err = c.conn.Write(messageBytes)
 
 
 
-func command(stationId, cmd string) (string, error) {
-	switch cmd {
-	case "start":
-		return buildCommand(stationId, "050007FF00")
-	case "stop":
-		return buildCommand(stationId, "0500070000")
-	case "read":
-		return buildCommand(stationId, "01004000")
-	default:
-		return "", fmt.Errorf("unknown cmd")
-	}
-}
 
-
-
-var table = crc16.MakeTable(crc16.CRC16_MODBUS)
-
-func buildCommand(stationId, payload string) (string, error) {
-    fullStr := stationId + payload
-
-    // 轉 []byte
-    data, err := hex.DecodeString(fullStr)
-    if err != nil {
-        return "", fmt.Errorf("hex decode failed: %v", err)
-    }
-
-    // 計算 CRC16-MODBUS
-    crcValue := crc16.Checksum(data, table)
-
-    // 轉成大寫 HEX（4 字碼）
-    crcHex := fmt.Sprintf("%04X", crcValue)
-
-    // Little endian：低位在前
-    crcLE := crcHex[2:4] + crcHex[0:2]
-
-    return fullStr + crcLE, nil
-}
 
 
 
