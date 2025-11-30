@@ -6,6 +6,9 @@ import (
 	"log"
 	"time"
 
+	"kenmec/jimmy/charge_core/eventbusV2/events"
+	"kenmec/jimmy/charge_core/eventbusV2/pub"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
@@ -14,6 +17,8 @@ type  MQTT_Client struct {
 	can *CANClient
 
 	configs MQTT_Config
+
+	stationService *pub.StationService
 }
 
 type MQTT_Config struct {
@@ -27,7 +32,7 @@ type MQTT_Config struct {
 }
 
 
-func NewMQTTClient(can *CANClient) *MQTT_Client{
+func NewMQTTClient(can *CANClient, stationService *pub.StationService) *MQTT_Client{
 
 	configs := MQTT_Config{
 		broker: "mqtt://localhost:1883",
@@ -72,6 +77,8 @@ func NewMQTTClient(can *CANClient) *MQTT_Client{
 		client: client,
 		can: can,
 		configs: configs,
+
+		stationService: stationService,
 	}
 
 }
@@ -97,13 +104,10 @@ func(m *MQTT_Client) Subscribe (topic string) {
 }
 
 
-func publish(client mqtt.Client, topic string) {
-
-}
 
 
 
-func (m *MQTT_Client) PublishStatus(s StationStatus) {
+func (m *MQTT_Client) PublishStatus(s events.StationStatus) {
     payload, _ := json.Marshal(s)
 
     token := m.client.Publish(m.configs.statusTopic, 0, false, payload)
@@ -115,3 +119,5 @@ func (m *MQTT_Client) PublishStatus(s StationStatus) {
         fmt.Println("📤 MQTT published:", string(payload))
     }
 }
+
+

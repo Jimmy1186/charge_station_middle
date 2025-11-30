@@ -8,6 +8,8 @@ import (
 	"net"
 	"time"
 
+	"kenmec/jimmy/charge_core/eventbusV2/events"
+	"kenmec/jimmy/charge_core/eventbusV2/pub"
 	"kenmec/jimmy/charge_core/tool"
 )
 
@@ -20,9 +22,11 @@ type CANClient struct {
     cancel     context.CancelFunc
 	isReady    chan struct{}
     intervalStop chan struct {}
+
+    stationService *pub.StationService
 }
 
-func NewCANClient(stationId, ip, port string) *CANClient {
+func NewCANClient(stationId string, ip string, port string, stationService *pub.StationService) *CANClient {
     ctx, cancel := context.WithCancel(context.Background())
 
     client := &CANClient{
@@ -31,7 +35,8 @@ func NewCANClient(stationId, ip, port string) *CANClient {
         writeQueue: make(chan []byte, 100), // buffered channel
         ctx:        ctx,
         cancel:     cancel,
-		isReady:    make(chan struct{}), //
+		isReady:    make(chan struct{}), 
+        stationService: stationService,
     }
 
     go client.run() // main control goroutine
@@ -109,15 +114,38 @@ func (c *CANClient) readLoop(done chan struct{}) {
     buffer := make([]byte, 1024)
 
     for {
-        _, err := c.conn.Read(buffer)
+        n, err := c.conn.Read(buffer)
         if err != nil {
             log.Println("Read error:", err)
             close(done)
             return
         }
 
-      //  log.Printf("Received %d bytes: %X\n", n, buffer[:n])
+	    c.handlePacket(buffer[:n])
     }
+}
+
+func (c *CANClient) handlePacket(pkt []byte) {
+	if len(pkt) < 6 {
+		fmt.Println("packet too short")
+		return
+	}
+
+	// fmt.Printf(
+	// 	"Station=%d, Status=%08b, Error=%08b, Other=%08b\n",
+	// 	pkt[0], pkt[3], pkt[4], pkt[5],
+	// )
+
+    payload := events.StationStatus{
+        StationID: fmt.Sprintf("%d", pkt[0]),
+        Status:    fmt.Sprintf("%08b", pkt[3]),
+        Error:     fmt.Sprintf("%08b", pkt[4]),
+        Other:     fmt.Sprintf("%08b", pkt[5]),
+    }
+
+    //送到event bus
+    c.stationService.PubStationStatus(payload)
+
 }
 
 func (c *CANClient) writeLoop() {

@@ -7,6 +7,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 type TCPClient struct {
@@ -26,12 +28,7 @@ type TCPClient struct {
 	OnConnect    func()
 	OnDisconnect func()
 }
-type StationStatus struct {
-    StationID uint8  `json:"stationId"`
-    Status    string `json:"status"`
-    Error     string `json:"error"`
-    Other     string `json:"other"`
-}
+
 
 
 func NewTCPClient(stationId, ip string, port int) *TCPClient {
@@ -57,6 +54,8 @@ func (c *TCPClient) connectLoop() {
 
 		conn, err := net.Dial("tcp", c.address)
 		if err != nil {
+
+		 log.Info().Msg("🔥 已連線，可以開始讀取資料")
 			fmt.Println("❌ TCP connect failed:", err)
 			time.Sleep(c.RetryDelay)
 			continue
@@ -153,26 +152,26 @@ func (c *TCPClient) SendCommand(cmd string) error {
 }
 
 
-func parsePacket(pkt []byte) (StationStatus, bool) {
-    if len(pkt) < 6 {
-        fmt.Println("packet too short")
-        return StationStatus{}, false
-    }
+// func parsePacket(pkt []byte) (events.StationStatus, bool) {
+//     if len(pkt) < 6 {
+//         fmt.Println("packet too short")
+//         return events.StationStatus{}, false
+//     }
 
-    st := StationStatus{
-        StationID: pkt[0],
-        Status:    fmt.Sprintf("%08b", pkt[3]),
-        Error:     fmt.Sprintf("%08b", pkt[4]),
-        Other:     fmt.Sprintf("%08b", pkt[5]),
-    }
+//     st := events.StationStatus{
+//         StationID: pkt[0],
+//         Status:    fmt.Sprintf("%08b", pkt[3]),
+//         Error:     fmt.Sprintf("%08b", pkt[4]),
+//         Other:     fmt.Sprintf("%08b", pkt[5]),
+//     }
 
-    fmt.Printf(
-        "Station=%d, Status=%s, Error=%s, Other=%s\n",
-        st.StationID, st.Status, st.Error, st.Other,
-    )
+//     fmt.Printf(
+//         "Station=%d, Status=%s, Error=%s, Other=%s\n",
+//         st.StationID, st.Status, st.Error, st.Other,
+//     )
 
-    return st, true
-}
+//     return st, true
+// }
 
 func (c *TCPClient) Send(data []byte) error {
 	c.mu.Lock()
