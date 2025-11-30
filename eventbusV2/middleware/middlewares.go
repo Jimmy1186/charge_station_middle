@@ -1,10 +1,13 @@
 package middleware
 
-import "fmt"
+import (
+	"fmt"
+	"log/slog"
+)
 
-
+// 您的 LogMiddleware 範例，現在內部可以調用 slog
 func LogMiddleware[T any](e T, next func(T) error) error {
-    fmt.Println("[Middleware] Event:", e)
+    slog.Info("Event:", "details", e)
     return next(e)
 }
 

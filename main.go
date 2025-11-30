@@ -5,11 +5,13 @@ import (
 	bus "kenmec/jimmy/charge_core/eventbusV2/manager"
 	"kenmec/jimmy/charge_core/eventbusV2/pub"
 	"kenmec/jimmy/charge_core/eventbusV2/sub"
+	"kenmec/jimmy/charge_core/log"
 
 	"github.com/rs/zerolog"
 )
 
 func main() {
+	log.InitLog()
    zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
 
