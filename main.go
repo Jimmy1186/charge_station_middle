@@ -30,29 +30,18 @@ func main() {
 
 	// 4. 開始訂閱指令
 	mqttClient.Subscribe("charge_station/command")
-	mqttHandler := sub.NewMQTTEventHandler(mqttClient)
+	mqttSub := sub.NewMQTTEventSub(mqttClient)
 
 	   	// 2. 建立所有 Handlers
    h:= &sub.Subs{
 	StationEventHandler: &sub.StationEventHandler{},
-	MqttHandler:mqttHandler,
+	MqttSub: mqttSub,
 }
 
-   busManager.RegisterHandlers(h.StationEventHandler)
+   busManager.RegisterSubscribers(h.StationEventHandler)
+   busManager.RegisterSubscribers(h.MqttSub)
    busManager.RegisterMiddlewares()
-
-
-	// client := api.NewTCPClient("01","192.168.0.168", 8899)
-
-	// client.OnConnect = func() {
-	// 		client.SendCommand("start")
-	// 	fmt.Println("🔥 已連線，可以開始讀取資料")
-	// }
-
-	// client.OnDisconnect = func() {
-	// 	fmt.Println("💥 斷線了，系統會自動重連")
-	// }
-
+   
 
 	
 

@@ -5,15 +5,16 @@ import (
 	"kenmec/jimmy/charge_core/eventbusV2/events"
 )
 
-type MQTTEventHandler struct {
+type MQTTEventSub struct {
 	mqtt *api.MQTT_Client
 }
 
-func NewMQTTEventHandler(m *api.MQTT_Client) *MQTTEventHandler {
-	return &MQTTEventHandler{mqtt: m}
+func NewMQTTEventSub(m *api.MQTT_Client) *MQTTEventSub {
+	return &MQTTEventSub{mqtt: m}
 }
 
-func (h *MQTTEventHandler) Handle(e events.StationStatus) error {
+//一定要叫Sub
+func (h *MQTTEventSub) Sub(e events.StationStatus) error {
 	// 呼叫 MQTT Client 發送狀態
 	h.mqtt.PublishStatus(e)
 	return nil

@@ -19,12 +19,12 @@ func NewBusManager() *BusManager {
 	}
 }
 
-// RegisterHandlers 註冊所有 Handlers
-func (bm *BusManager) RegisterHandlers(
+// RegisterSubscribers 註冊所有 subscriber
+func (bm *BusManager) RegisterSubscribers(
 	stationEventHandler interface{}, 
 	) {
 	// 註冊一般事件處理
-	if h, ok := stationEventHandler.(Handler[events.StationStatus]); ok {
+	if h, ok := stationEventHandler.(Sub[events.StationStatus]); ok {
 		bm.StationEventBus.Subscribe(h)
 	}
 }

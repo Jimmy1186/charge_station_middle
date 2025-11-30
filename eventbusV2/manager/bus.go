@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-type Handler[T any] interface {
-	Handle(T) error
+type Sub[T any] interface {
+	Sub(T) error
 }
 
 type Middleware[T any] func(T, func(T) error) error
@@ -18,14 +18,14 @@ type EventBus[T any] interface {
 	PublishSync(event T) error
 	PublishAsync(event T) error
 
-	Subscribe(handler Handler[T])
+	Subscribe(handler Sub[T])
 	Use(middleware Middleware[T])
 
 	Close() error
 }
 
 type simpleEventBus[T any] struct {
-	handlers    []Handler[T]
+	handlers    []Sub[T]
 	middlewares []Middleware[T]
 
 	asyncJobs   chan T
@@ -45,7 +45,7 @@ func New[T any]() EventBus[T] {
 	cpu := runtime.NumCPU()
 
 	b := &simpleEventBus[T]{
-		handlers:    make([]Handler[T], 0),
+		handlers:    make([]Sub[T], 0),
 		middlewares: make([]Middleware[T], 0),
 
 		asyncJobs:  make(chan T, 2000),
@@ -77,7 +77,7 @@ func (b *simpleEventBus[T]) worker() {
 	}
 }
 
-func (b *simpleEventBus[T]) Subscribe(h Handler[T]) {
+func (b *simpleEventBus[T]) Subscribe(h Sub[T]) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.handlers = append(b.handlers, h)
@@ -122,7 +122,7 @@ func (b *simpleEventBus[T]) PublishSync(event T) error {
 func (b *simpleEventBus[T]) exec(event T) error {
 	// build final handler with read lock to protect handlers slice
 	b.mu.RLock()
-	handlersCopy := make([]Handler[T], len(b.handlers))
+	handlersCopy := make([]Sub[T], len(b.handlers))
 	copy(handlersCopy, b.handlers)
 
 	// copy middlewares
@@ -132,7 +132,7 @@ func (b *simpleEventBus[T]) exec(event T) error {
 
 	finalHandler := func(e T) error {
 		for _, h := range handlersCopy {
-			if err := h.Handle(e); err != nil {
+			if err := h.Sub(e); err != nil {
 				return err
 			}
 		}
