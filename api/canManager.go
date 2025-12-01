@@ -1,0 +1,64 @@
+package api
+
+import (
+	"kenmec/jimmy/charge_core/eventbusV2/pub"
+	"sync"
+)
+
+
+type CANManager struct {
+	mu sync.RWMutex
+	client map[string] *CANClient
+}
+
+
+func NewCANManager() *CANManager {
+	return  &CANManager{
+		client: make(map[string]*CANClient),
+	}
+}
+
+
+
+func (m *CANManager) Add(stationId, ip , port string, service *pub.StationService) *CANClient{
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	client := NewCANClient(stationId,ip,port , service)
+	m.client[stationId] = client
+	return  client
+}
+
+func (m *CANManager) GetAllClient()(map[string] *CANClient){
+	return  m.client
+}
+
+func (m *CANManager) Get(stationId string) (*CANClient, bool){
+	m.mu.RLocker()
+	defer m.mu.RUnlock()
+
+	c, ok := m.client[stationId]
+	return c, ok
+}
+
+func (m *CANManager) Remove(stationId string){
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, ok := m.client[stationId]
+
+	if ok {
+		c.Close()
+		delete(m.client, stationId)
+	}
+}
+
+func (m *CANManager) CloseAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for id, c := range m.client {
+		c.Close()
+		delete(m.client, id)
+	}
+}

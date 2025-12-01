@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net"
 	"time"
 
@@ -48,8 +47,8 @@ func (c *CANClient) run() {
     for {
         err := c.connect()
         if err != nil {
-            log.Println(err)
-            log.Println("Reconnect in 3 seconds...")
+            fmt.Println(err)
+            fmt.Println("Reconnect in 3 seconds...")
             time.Sleep(3 * time.Second)
             continue
         }
@@ -63,12 +62,12 @@ func (c *CANClient) run() {
 
         select {
         case <-readDone:
-            log.Println("Connection lost, reconnecting...")
+            fmt.Println("Connection lost, reconnecting...")
             c.stopInterval()  // <-- 斷線必須停掉 interval
             c.conn.Close()
 
         case <-c.ctx.Done():
-            log.Println("Shutting down CAN client...")
+            fmt.Println("Shutting down CAN client...")
             c.stopInterval()  // <-- 關閉也必須停掉 interval
             c.conn.Close()
             return
@@ -78,19 +77,21 @@ func (c *CANClient) run() {
 
 
 func (c *CANClient) connect() error {
+    fmt.Println("try to connect")
     // 1. 使用 net.Dial。這會自動選擇一個本地的隨機埠來發送和接收數據。
     // c.addr 必須是遠端目標的 IP:Port (例如 "192.168.1.100:8080" 或 "127.0.0.1:8080")
     conn, err := net.Dial("udp", c.addr)
     if err != nil {
-        log.Printf("Dial failed: %v\n", err)
+        fmt.Printf("Dial failed: %v\n", err)
+
         return err
     }
-
     c.conn = conn
     
     // 處理連線就緒通知 (保持您先前新增的邏輯)
     select {
     case <-c.isReady:
+       
         // 已經關閉，通常是重連的情況，需要確保頻道再次被初始化
         // 由於 Go Channel 關閉後無法重新打開，我們需要一個更強健的狀態機制
         // 暫時保持不變，但請注意這是重連邏輯的潛在問題
@@ -99,7 +100,7 @@ func (c *CANClient) connect() error {
         close(c.isReady) 
     }
     
-    log.Println("Connected to device:", c.addr)
+    fmt.Println("Connected to device:", c.addr)
     return nil
 }
 
@@ -107,7 +108,7 @@ func (c *CANClient) connect() error {
 // 新增：等待連線建立完成
 func (c *CANClient) WaitForConnection() {
     <-c.isReady
-    log.Println("CAN client is ready for commands.")
+    fmt.Println("CAN client is ready for commands.")
 }
 
 func (c *CANClient) readLoop(done chan struct{}) {
@@ -116,7 +117,7 @@ func (c *CANClient) readLoop(done chan struct{}) {
     for {
         n, err := c.conn.Read(buffer)
         if err != nil {
-            log.Println("Read error:", err)
+            fmt.Println("Read error:", err)
             close(done)
             return
         }
@@ -154,7 +155,7 @@ func (c *CANClient) writeLoop() {
         case msg := <-c.writeQueue:
             _, err := c.conn.Write(msg)
             if err != nil {
-                log.Println("Write error:", err)
+                fmt.Println("Write error:", err)
             }
 
         case <-c.ctx.Done():
@@ -193,7 +194,7 @@ func (c *CANClient) SendTextCommandToCAN(){
 	messageBytes, err := hex.DecodeString(messageHex)
 
 	if err != nil{
-		log.Fatal(err)
+		fmt.Print(err)
 	}
 
 _, err = c.conn.Write(messageBytes)
@@ -226,7 +227,7 @@ func (c *CANClient) startInterval() {
 
     go func(stop <-chan struct{}) {
         ticker := time.NewTicker(2 * time.Second)
-        log.Println("Ticker started")
+        fmt.Println("Ticker started")
 
         for {
             select {
@@ -235,7 +236,7 @@ func (c *CANClient) startInterval() {
 
             case <-stop:
                 ticker.Stop()
-                log.Println("Ticker stopped.")
+                fmt.Println("Ticker stopped.")
                 return
             }
         }

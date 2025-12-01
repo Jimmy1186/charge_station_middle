@@ -6,46 +6,38 @@ import (
 	"kenmec/jimmy/charge_core/eventbusV2/pub"
 	"kenmec/jimmy/charge_core/eventbusV2/sub"
 	"kenmec/jimmy/charge_core/log"
-
-	"github.com/rs/zerolog"
 )
 
 func main() {
-	log.InitLog()
-   zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+		log.InitLog()
 
+	busManager := bus.NewBusManager()
+	stationService := pub.NewUserService(busManager)
 
-   busManager := bus.NewBusManager()
+	// ⭐ 建立 CANManager
+	canManager := api.NewCANManager()
 
+	// ⭐ 設定多個站
+	can1 := canManager.Add("01", "127.0.0.1", "8081", stationService)
+	can2 := canManager.Add("02", "127.0.0.1", "8082", stationService)
 
+	// 等待多個 station ready
+	can1.WaitForConnection()
+	can2.WaitForConnection()
 
-   stationService := pub.NewUserService(busManager)
+	// 每個 station 可以獨立接 MQTT（如果你要）
+	mqtt := api.NewMQTTClient(canManager.GetAllClient(), stationService)
+	mqtt.Subscribe("charge_station/command")
 
-	// 1. 建立 CAN Client
-	can := api.NewCANClient("01", "127.0.0.1", "8080" ,stationService)
+	// Handlers 註冊
+	h := &sub.Subs{
+		StationEventHandler: &sub.StationEventHandler{},
+		MqttSub:             sub.NewMQTTEventSub(mqtt),
+	}
 
-	// 2. 等待 CAN Ready
-	can.WaitForConnection()
+	busManager.RegisterSubscribers(h.StationEventHandler)
+	busManager.RegisterSubscribers(h.MqttSub)
+	busManager.RegisterMiddlewares()
 
-	// 3. 建立 MQTT Client（並把 can 傳進去）
-	mqttClient := api.NewMQTTClient(can,stationService)
-
-	// 4. 開始訂閱指令
-	mqttClient.Subscribe("charge_station/command")
-	mqttSub := sub.NewMQTTEventSub(mqttClient)
-
-	   	// 2. 建立所有 Handlers
-   h:= &sub.Subs{
-	StationEventHandler: &sub.StationEventHandler{},
-	MqttSub: mqttSub,
-}
-
-   busManager.RegisterSubscribers(h.StationEventHandler)
-   busManager.RegisterSubscribers(h.MqttSub)
-   busManager.RegisterMiddlewares()
-   
-
-	
-
-	select {} // 不讓 main 結束
+	select {}
 }

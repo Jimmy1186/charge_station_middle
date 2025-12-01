@@ -14,7 +14,7 @@ import (
 
 type  MQTT_Client struct {
 	client  mqtt.Client
-	can *CANClient
+	can map[string]*CANClient
 
 	configs MQTT_Config
 
@@ -32,10 +32,10 @@ type MQTT_Config struct {
 }
 
 
-func NewMQTTClient(can *CANClient, stationService *pub.StationService) *MQTT_Client{
+func NewMQTTClient(can map[string]*CANClient, stationService *pub.StationService) *MQTT_Client{
 
 	configs := MQTT_Config{
-		broker: "mqtt://localhost:1883",
+		broker: "tcp://localhost:1883",
 		clientID: "go_mqtt_client_charger",
 		user: "admin",
 		password: "admin",
