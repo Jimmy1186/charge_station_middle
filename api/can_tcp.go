@@ -9,6 +9,7 @@ import (
 
 	"kenmec/jimmy/charge_core/eventbusV2/events"
 	"kenmec/jimmy/charge_core/eventbusV2/pub"
+	klog "kenmec/jimmy/charge_core/log"
 	"kenmec/jimmy/charge_core/tool"
 )
 
@@ -47,8 +48,9 @@ func (c *CANClient) run() {
     for {
         err := c.connect()
         if err != nil {
-            fmt.Println(err)
-            fmt.Println("Reconnect in 3 seconds...")
+      
+            klog.Logger.Error("Reconnect in 3 seconds...")
+            klog.Logger.Error(fmt.Sprintf("can connect error: %e", err))
             time.Sleep(3 * time.Second)
             continue
         }
@@ -62,12 +64,12 @@ func (c *CANClient) run() {
 
         select {
         case <-readDone:
-            fmt.Println("Connection lost, reconnecting...")
+            klog.Logger.Info("Connection lost, reconnecting...")
             c.stopInterval()  // <-- 斷線必須停掉 interval
             c.conn.Close()
 
         case <-c.ctx.Done():
-            fmt.Println("Shutting down CAN client...")
+            klog.Logger.Info("Shutting down CAN client...")
             c.stopInterval()  // <-- 關閉也必須停掉 interval
             c.conn.Close()
             return
@@ -77,12 +79,12 @@ func (c *CANClient) run() {
 
 
 func (c *CANClient) connect() error {
-    fmt.Println("try to connect")
+    klog.Logger.Error("try to connect")
     // 1. 使用 net.Dial。這會自動選擇一個本地的隨機埠來發送和接收數據。
     // c.addr 必須是遠端目標的 IP:Port (例如 "192.168.1.100:8080" 或 "127.0.0.1:8080")
     conn, err := net.Dial("udp", c.addr)
     if err != nil {
-        fmt.Printf("Dial failed: %v\n", err)
+        klog.Logger.Error(fmt.Sprintf("Dial failed: %v", err))
 
         return err
     }
@@ -100,7 +102,7 @@ func (c *CANClient) connect() error {
         close(c.isReady) 
     }
     
-    fmt.Println("Connected to device:", c.addr)
+    klog.Logger.Info(fmt.Sprintf("Connected to device: %s", c.addr))
     return nil
 }
 
@@ -108,7 +110,7 @@ func (c *CANClient) connect() error {
 // 新增：等待連線建立完成
 func (c *CANClient) WaitForConnection() {
     <-c.isReady
-    fmt.Println("CAN client is ready for commands.")
+    klog.Logger.Info("CAN client is ready for commands.")
 }
 
 func (c *CANClient) readLoop(done chan struct{}) {
@@ -117,7 +119,7 @@ func (c *CANClient) readLoop(done chan struct{}) {
     for {
         n, err := c.conn.Read(buffer)
         if err != nil {
-            fmt.Println("Read error:", err)
+            klog.Logger.Error(fmt.Sprintf("Read error: %v", err))
             close(done)
             return
         }
@@ -127,8 +129,8 @@ func (c *CANClient) readLoop(done chan struct{}) {
 }
 
 func (c *CANClient) handlePacket(pkt []byte) {
-	if len(pkt) < 6 {
-		fmt.Println("packet too short")
+    if len(pkt) < 6 {
+        klog.Logger.Error("packet too short")
 		return
 	}
 
@@ -155,7 +157,7 @@ func (c *CANClient) writeLoop() {
         case msg := <-c.writeQueue:
             _, err := c.conn.Write(msg)
             if err != nil {
-                fmt.Println("Write error:", err)
+                klog.Logger.Error(fmt.Sprintf("Write error: %v", err))
             }
 
         case <-c.ctx.Done():
@@ -193,23 +195,16 @@ func (c *CANClient) SendTextCommandToCAN(){
 	// 將十六進位字串轉換為位元組
 	messageBytes, err := hex.DecodeString(messageHex)
 
-	if err != nil{
-		fmt.Print(err)
-	}
+    if err != nil{
+        klog.Logger.Error(fmt.Sprintf("%v", err))
+    }
 
 _, err = c.conn.Write(messageBytes)
-	if err != nil {
-		fmt.Printf("發送數據失敗: %v\n", err)
-		return
-	}
+    if err != nil {
+        klog.Logger.Error(fmt.Sprintf("發送數據失敗: %v", err))
+        return
+    }
 }
-
-
-
-
-
-
-
 
 
 
@@ -227,8 +222,7 @@ func (c *CANClient) startInterval() {
 
     go func(stop <-chan struct{}) {
         ticker := time.NewTicker(2 * time.Second)
-        fmt.Println("Ticker started")
-
+        
         for {
             select {
             case <-ticker.C:
@@ -236,7 +230,7 @@ func (c *CANClient) startInterval() {
 
             case <-stop:
                 ticker.Stop()
-                fmt.Println("Ticker stopped.")
+        
                 return
             }
         }

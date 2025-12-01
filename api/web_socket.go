@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	klog "kenmec/jimmy/charge_core/log"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -38,7 +40,7 @@ func (c *WS_Client) connect() error {
 	for {
 		conn, _, err := websocket.DefaultDialer.Dial(c.url, nil)
 		if err != nil {
-			fmt.Println("connect failed, retrying in 2s...", err)
+			klog.Logger.Error(fmt.Sprintf("connect failed, retrying in 2s... %v", err))
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -48,7 +50,7 @@ func (c *WS_Client) connect() error {
 		c.isConnected = true
 		c.writeMu.Unlock()
 
-		fmt.Println("✅ Connected to TypeScript server")
+		klog.Logger.Info("✅ Connected to TypeScript server")
 		return nil
 	}
 }
@@ -71,15 +73,15 @@ func (c *WS_Client) ReadData() (string, error) {
 		return "", fmt.Errorf("not connected")
 	}
 
-	_, msg, err := c.Conn.ReadMessage() // 阻塞讀取
-	if err != nil {
-		c.isConnected = false
-		fmt.Println("read error:", err, "-> reconnecting")
-		go c.connect()
-		return "", err
-	}
+		_, msg, err := c.Conn.ReadMessage() // 阻塞讀取
+		if err != nil {
+			c.isConnected = false
+			klog.Logger.Error(fmt.Sprintf("read error: %v -> reconnecting", err))
+			go c.connect()
+			return "", err
+		}
 
-	fmt.Println("📩 ReadData:", string(msg))
+		klog.Logger.Info(fmt.Sprintf("📩 ReadData: %s", string(msg)))
 	return string(msg), nil
 }
 
@@ -92,7 +94,7 @@ func (c *WS_Client) readLoop() {
 			continue
 		}
 		// 每次讀到訊息就印出
-		fmt.Println("Received:", msg)
+		klog.Logger.Info(fmt.Sprintf("Received: %s", msg))
 	}
 }
 

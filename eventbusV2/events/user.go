@@ -8,3 +8,7 @@ type StationStatus struct {
     Error     string
     Other     string 
 }
+
+type QamsCommand struct {
+    Cmd string
+}

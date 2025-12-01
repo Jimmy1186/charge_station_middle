@@ -25,8 +25,8 @@ func (bm *BusManager) RegisterSubscribers(
 	) {
 	// 註冊一般事件處理
 	if h, ok := stationEventHandler.(Sub[events.StationStatus]); ok {
-		bm.StationEventBus.Subscribe(h)
-	}
+    bm.StationEventBus.Subscribe(h)
+}
 }
 
 // RegisterMiddlewares 註冊中間件

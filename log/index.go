@@ -60,7 +60,7 @@ func InitLog() {
         zapcore.NewCore(fileEncoder, zapcore.AddSync(file), zap.DebugLevel),
     )
 
-    Logger = zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+    Logger = zap.New(core,  zap.AddStacktrace(zapcore.ErrorLevel))
 }
 
 func GetKenmecFilePath() (string, error) {
@@ -73,35 +73,3 @@ func GetKenmecFilePath() (string, error) {
     return kenmecPath, nil
 }
 
-
-// Infof / Warnf / Errorf 都模仿 fmt.Printf 的用法
-func Infof(format string, args ...interface{}) {
-    if Logger != nil {
-        Logger.Info(fmt.Sprintf(format, args...))
-    }
-}
-
-func Warnf(format string, args ...interface{}) {
-    if Logger != nil {
-        Logger.Warn(fmt.Sprintf(format, args...))
-    }
-}
-
-func Errorf(format string, args ...interface{}) {
-    if Logger != nil {
-        Logger.Error(fmt.Sprintf(format, args...))
-    }
-}
-
-// Println / Printf 類似 fmt.Println / fmt.Printf
-func Println(args ...interface{}) {
-    if Logger != nil {
-        Logger.Info(fmt.Sprintln(args...))
-    }
-}
-
-func Printf(format string, args ...interface{}) {
-    if Logger != nil {
-        Logger.Info(fmt.Sprintf(format, args...))
-    }
-}

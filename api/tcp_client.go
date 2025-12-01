@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	klog "kenmec/jimmy/charge_core/log"
 )
 
 type TCPClient struct {
@@ -54,9 +54,8 @@ func (c *TCPClient) connectLoop() {
 
 		conn, err := net.Dial("tcp", c.address)
 		if err != nil {
-
-		 log.Info().Msg("🔥 已連線，可以開始讀取資料")
-			fmt.Println("❌ TCP connect failed:", err)
+		 
+			klog.Logger.Warn(fmt.Sprintf("❌ TCP connect failed:", err))
 			time.Sleep(c.RetryDelay)
 			continue
 		}
@@ -69,7 +68,7 @@ func (c *TCPClient) connectLoop() {
 		c.Ready = nil  // 標記為已經通知過
 		c.mu.Unlock()
 
-		fmt.Println("✅ TCP connected:", c.address)
+		klog.Logger.Info(fmt.Sprintf("✅ TCP connected:", c.address))
 
 		if c.OnConnect != nil {
 			c.OnConnect()
@@ -84,7 +83,7 @@ func (c *TCPClient) connectLoop() {
 		c.Conn.Close()
 		c.mu.Unlock()
 
-		fmt.Println("⚠️ TCP disconnected, retrying...")
+		klog.Logger.Warn(fmt.Sprintf("⚠️ TCP disconnected, retrying..."))
 
 		if c.OnDisconnect != nil {
 			c.OnDisconnect()
@@ -107,7 +106,7 @@ func (c *TCPClient) readLoop() {
 		n, err := conn.Read(buf)
 		if err != nil {
 			// readLoop 退出 → 代表斷線
-			fmt.Println("❌ TCP read error:", err)
+			klog.Logger.Error(fmt.Sprintf("❌ TCP read error:", err))
 			return
 		}
 
@@ -117,15 +116,9 @@ func (c *TCPClient) readLoop() {
 
 func (c *TCPClient) handlePacket(pkt []byte) {
 	if len(pkt) < 6 {
-		fmt.Println("packet too short")
+		klog.Logger.Error("packet too short")
 		return
 	}
-
-	fmt.Printf(
-		"Station=%d, Status=%08b, Error=%08b, Other=%08b\n",
-		pkt[0], pkt[3], pkt[4], pkt[5],
-	)
-
 	// TODO：你也可以丟給 MQTT 這裡
 }
 
