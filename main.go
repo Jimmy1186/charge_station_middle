@@ -9,7 +9,8 @@ import (
 )
 
 func main() {
-		log.InitLog()
+	log.InitLog()
+
 
 	busManager := bus.NewBusManager()
 	stationService := pub.NewUserService(busManager)
@@ -27,7 +28,7 @@ func main() {
 
 	// 每個 station 可以獨立接 MQTT（如果你要）
 	mqtt := api.NewMQTTClient(canManager.GetAllClient(), stationService)
-	mqtt.Subscribe("charge_station/command")
+	mqtt.Subscribe("charge_station/+/command")
 
 	// Handlers 註冊
 	h := &sub.Subs{

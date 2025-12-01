@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"kenmec/jimmy/charge_core/eventbusV2/events"
@@ -36,7 +37,7 @@ func NewMQTTClient(can map[string]*CANClient, stationService *pub.StationService
 
 	configs := MQTT_Config{
 		broker: "tcp://localhost:1883",
-		clientID: "go_mqtt_client_charger",
+		clientID: fmt.Sprintf("go_charger_%d", time.Now().UnixNano()),
 		user: "admin",
 		password: "admin",
 		statusTopic: "charge_station/status",
@@ -84,23 +85,50 @@ func NewMQTTClient(can map[string]*CANClient, stationService *pub.StationService
 }
 
 
-func(m *MQTT_Client) Subscribe (topic string) {
+func (m *MQTT_Client) Subscribe(topic string) {
 
-	token := m.client.Subscribe(topic, 0, func(c mqtt.Client, ms mqtt.Message) {
-			payload := ms.Payload()
-			log.Printf("📩 MQTT 收到命令: %s\n", payload)
+    token := m.client.Subscribe(topic, 0,
+        func(c mqtt.Client, ms mqtt.Message) {
+			fmt.Println(ms)
+            topic := ms.Topic()
+            payload := string(ms.Payload())
+			fmt.Println("============")
+			fmt.Println(payload)
+				fmt.Println("============")
+            // topic: charge_station/01/command
+            parts := strings.Split(topic, "/") 
+            if len(parts) < 3 {
+                log.Printf("❌ MQTT topic 格式錯誤: %s\n", topic)
+				fmt.Printf("❌ MQTT topic 格式錯誤: %s\n", topic)
+                return
+            }
+			
+            stationId := parts[1] // 第二段就是 stationId: 01, 02, ...
+		
+            log.Printf("📩 MQTT 收到給 [%s] 的命令: %s\n", stationId, payload)
 
-		// ⭐ 呼叫 CAN 進行實際動作
-		// err := m.can.SendCommand(payload)
+            // 找出對應的 CAN client
+            if canClient, ok := m.can[stationId]; ok {
+                err := canClient.SendCommand(payload)
+                if err != nil {
+					fmt.Printf("❌ Station [%s] SendCommand error: %v\n", stationId, err)
+                    log.Printf("❌ Station [%s] SendCommand error: %v\n", stationId, err)
+                }
+            } else {
+				fmt.Printf("❌ 找不到 CAN station [%s]\n", stationId)
+                log.Printf("❌ 找不到 CAN station [%s]\n", stationId)
+            }
+			log.Println("🔥 MQTT SUBSCRIBER IS ACTIVE")
 
-	})
+        })
 
-	token.Wait()
-	if token.Error() != nil {
-		fmt.Printf("❌ 訂閱主題 [%s] 失敗: %v\n", topic, token.Error())
-		return 
-	}
-	fmt.Printf("✅ 成功訂閱主題: %s\n", topic)
+    token.Wait()
+    if token.Error() != nil {
+        fmt.Printf("❌ 訂閱主題 [%s] 失敗: %v\n", topic, token.Error())
+        return
+    }
+    fmt.Printf("✅ 成功訂閱主題: %s\n", topic)
+	
 }
 
 
@@ -116,7 +144,7 @@ func (m *MQTT_Client) PublishStatus(s events.StationStatus) {
     if token.Error() != nil {
         fmt.Println("❌ MQTT publish error:", token.Error())
     } else {
-        fmt.Println("📤 MQTT published:", string(payload))
+        //fmt.Println("📤 MQTT published:", string(payload))
     }
 }
 

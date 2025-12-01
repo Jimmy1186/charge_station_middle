@@ -2,70 +2,106 @@ package log
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"os/user"
 	"path/filepath"
-	"time" // <-- 導入 time 套件
+	"time"
 
-	"gopkg.in/natefinch/lumberjack.v2"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-// InitLog 初始化日誌系統，使用日期作為日誌檔案名稱的一部分
-func InitLog() {
+var Logger *zap.Logger
 
+// InitLog 初始化 zap logger
+// logFilePath: 日誌檔案路徑，例如 "app.log"
+
+
+func InitLog() {
     kenmecPath, err := GetKenmecFilePath()
     if err != nil {
-        fmt.Println("錯誤: 無法獲取 Kenmec 路徑:", err)
-        return
+        panic(err)
     }
-    
-    // 1. 定義日誌目錄 (e.g., C:\Users\username\kenmec\_logs)
+
+    // 日誌目錄
     logDir := filepath.Join(kenmecPath, "_logs/charge_station")
-
-    // 2. 檢查目錄是否存在，若不存在則創建
-    if err := os.MkdirAll(logDir, 0755); err != nil {
-        fmt.Printf("錯誤: 無法創建日誌目錄 %s: %v\n", logDir, err)
-        return 
-    }
-    
-    // 3. 動態構建檔案名稱：charge_station_YYYY-MM-DD.log
-    // time.Now().Format("2006-01-02") 會輸出當前日期，格式為 YYYY-MM-DD
-    dateStr := time.Now().Format("2006-01-02") 
-    baseName := fmt.Sprintf("charge_station_%s.log", dateStr)
-    
-    // 4. 組合完整的日誌檔案路徑
-    logFileName := filepath.Join(logDir, baseName) 
-    
-    // 5. 設定 Lumberjack 輪替規則
-    logRotator := &lumberjack.Logger{
-        // Filename 現在是帶有當天日期的完整路徑
-        Filename:   logFileName, 
-        MaxSize:    100,       // 檔案超過 100MB 進行切割
-        MaxBackups: 5,         // 最多保留 5 個備份檔案
-        MaxAge:     30,        // 最多保留 30 天的日誌
-        Compress:   true,      // 輪替時進行 Gzip 壓縮
+    err = os.MkdirAll(logDir, os.ModePerm)
+    if err != nil {
+        panic("無法建立 log 目錄: " + err.Error())
     }
 
-    // 6. 建立 slog 的 Handler
-    multiWriter := slog.NewJSONHandler(logRotator, nil)
+    // 產生每日 log 檔案名稱
+    today := time.Now().Format("2006-01-02") // YYYY-MM-DD
+    logFilePath := filepath.Join(logDir, fmt.Sprintf("charge_station-%s.log", today))
 
-    // 7. 設定為預設 Logger
-    logger := slog.New(multiWriter)
-    slog.SetDefault(logger)
+    // 開啟或建立 log 檔案
+    file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+    if err != nil {
+        panic("無法開啟 log 檔案: " + err.Error())
+    }
 
-    slog.Info("日誌系統初始化成功", "log_path", logFileName)
+    // Encoder 設定
+    encoderCfg := zap.NewProductionEncoderConfig()
+    encoderCfg.TimeKey = "T"
+    encoderCfg.LevelKey = "L"
+    encoderCfg.CallerKey = "C"
+    encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+    encoderCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+    encoderCfg.EncodeCaller = zapcore.ShortCallerEncoder
+
+    // Terminal encoder
+    consoleEncoder := zapcore.NewConsoleEncoder(encoderCfg)
+    // File encoder (json)
+    fileEncoder := zapcore.NewJSONEncoder(encoderCfg)
+
+    // 同時輸出到 terminal 與檔案
+    core := zapcore.NewTee(
+        zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), zap.DebugLevel),
+        zapcore.NewCore(fileEncoder, zapcore.AddSync(file), zap.DebugLevel),
+    )
+
+    Logger = zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 }
 
-// GetKenmecFilePath 保持不變
 func GetKenmecFilePath() (string, error) {
     currentUser, err := user.Current()
     if err != nil {
         return "", fmt.Errorf("無法獲取用戶主目錄: %w", err)
     }
     homeDir := currentUser.HomeDir
-
     kenmecPath := filepath.Join(homeDir, "kenmec")
-
     return kenmecPath, nil
+}
+
+
+// Infof / Warnf / Errorf 都模仿 fmt.Printf 的用法
+func Infof(format string, args ...interface{}) {
+    if Logger != nil {
+        Logger.Info(fmt.Sprintf(format, args...))
+    }
+}
+
+func Warnf(format string, args ...interface{}) {
+    if Logger != nil {
+        Logger.Warn(fmt.Sprintf(format, args...))
+    }
+}
+
+func Errorf(format string, args ...interface{}) {
+    if Logger != nil {
+        Logger.Error(fmt.Sprintf(format, args...))
+    }
+}
+
+// Println / Printf 類似 fmt.Println / fmt.Printf
+func Println(args ...interface{}) {
+    if Logger != nil {
+        Logger.Info(fmt.Sprintln(args...))
+    }
+}
+
+func Printf(format string, args ...interface{}) {
+    if Logger != nil {
+        Logger.Info(fmt.Sprintf(format, args...))
+    }
 }

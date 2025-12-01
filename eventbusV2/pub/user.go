@@ -3,7 +3,6 @@ package pub
 // service/order_service.go
 
 import (
-	"fmt"
 	"kenmec/jimmy/charge_core/eventbusV2/events"
 	"kenmec/jimmy/charge_core/eventbusV2/manager"
 )
@@ -29,7 +28,7 @@ func (s *StationService) PubStationStatus(payload events.StationStatus ) {
 		Error: payload.Error,
 	})
 	
-	fmt.Println("station event published")
+	///fmt.Println("station event published")
 }
 
 
