@@ -15,7 +15,7 @@ import (
 
 type  MQTT_Client struct {
 	client  mqtt.Client
-	can map[string]*CANClient
+
 
 	configs MQTT_Config
 
@@ -33,7 +33,7 @@ type MQTT_Config struct {
 }
 
 
-func NewMQTTClient(can map[string]*CANClient, stationService *pub.StationService) *MQTT_Client{
+func NewMQTTClient( stationService *pub.StationService) *MQTT_Client{
 
 	configs := MQTT_Config{
 		broker: "tcp://localhost:1883",
@@ -79,7 +79,7 @@ func NewMQTTClient(can map[string]*CANClient, stationService *pub.StationService
 
 	return &MQTT_Client{
 		client: client,
-		can: can,
+
 		configs: configs,
 
 		stationService: stationService,
@@ -107,25 +107,12 @@ func (m *MQTT_Client) Subscribe(topic string) {
 		
 			klog.Logger.Info(fmt.Sprintf("📩 MQTT 收到給 [%s] 的命令: %s", stationId, payload))
 
-			// pubData := events.QamsCommand{
-			// 	Cmd: payload,
-			// }
+			pubData := events.QamsCommand{
+				Cmd: payload,
+			}
 
-			// m.stationService.PubQamsCommand(pubData)
-
-            // 找出對應的 CAN client
-            if canClient, ok := m.can[stationId]; ok {
-                err := canClient.SendCommand(payload)
-				if err != nil {
-					klog.Logger.Error(fmt.Sprintf("❌ Station [%s] SendCommand error: %v", stationId, err))
-					
-				}
-            } else {
-				klog.Logger.Error(fmt.Sprintf("❌ 找不到 CAN station [%s]", stationId))
-				
-            }
-	
-
+			//送到eventbus
+			m.stationService.PubQamsCommand(stationId, pubData)
         })
 
     token.Wait()

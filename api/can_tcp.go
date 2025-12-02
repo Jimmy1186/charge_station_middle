@@ -155,6 +155,7 @@ func (c *CANClient) writeLoop() {
     for {
         select {
         case msg := <-c.writeQueue:
+            fmt.Printf("command send to CAN: %v/n", msg)
             _, err := c.conn.Write(msg)
             if err != nil {
                 klog.Logger.Error(fmt.Sprintf("Write error: %v", err))

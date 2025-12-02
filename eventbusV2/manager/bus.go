@@ -7,6 +7,12 @@ import (
 	"sync"
 	"time"
 )
+type FuncSub[T any] func(T) error
+
+func (f FuncSub[T]) Sub(e T) error {
+	return f(e)
+}
+
 
 type Sub[T any] interface {
 	Sub(T) error
@@ -28,7 +34,7 @@ type simpleEventBus[T any] struct {
 	handlers    []Sub[T]
 	middlewares []Middleware[T]
 
-	asyncJobs   chan T
+	asyncJobs   chan T  //不阻塞async時用的
 	workerCount int
 	minWorkers  int
 	maxWorkers  int
@@ -77,6 +83,7 @@ func (b *simpleEventBus[T]) worker() {
 	}
 }
 
+// 把需要收到這個事件的人訂閱到 handler
 func (b *simpleEventBus[T]) Subscribe(h Sub[T]) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -89,7 +96,7 @@ func (b *simpleEventBus[T]) Use(m Middleware[T]) {
 	b.middlewares = append(b.middlewares, m)
 }
 
-// PublishAsync puts event to queue; fallback to goroutine if queue is full
+// 可以放到 後面去處裡像是通知之類的比較不重要的事
 func (b *simpleEventBus[T]) PublishAsync(event T) error {
 	b.closeMu.Lock()
 	closed := b.closed
@@ -99,16 +106,17 @@ func (b *simpleEventBus[T]) PublishAsync(event T) error {
 	}
 
 	select {
-	case b.asyncJobs <- event:
+		//把 event 塞到 asyncJobs
+	case b.asyncJobs <- event: 
 		return nil
 	default:
-		// fallback to avoid blocking producer: handle in new goroutine
+		// 如果asyncJobs滿出來的話 就直接執行
 		go b.exec(event)
 		return nil
 	}
 }
 
-// PublishSync executes handlers in current goroutine and returns error
+// 會堵塞執行續 重要事件像是寫資料庫 順序很重要的事件
 func (b *simpleEventBus[T]) PublishSync(event T) error {
 	b.closeMu.Lock()
 	closed := b.closed
@@ -119,9 +127,12 @@ func (b *simpleEventBus[T]) PublishSync(event T) error {
 	return b.exec(event)
 }
 
+/// 當每次呼叫pub相關func 就會觸發這個
 func (b *simpleEventBus[T]) exec(event T) error {
 	// build final handler with read lock to protect handlers slice
 	b.mu.RLock()
+
+	// pub進去到handler這個array後 邊複製到一份
 	handlersCopy := make([]Sub[T], len(b.handlers))
 	copy(handlersCopy, b.handlers)
 
@@ -130,6 +141,7 @@ func (b *simpleEventBus[T]) exec(event T) error {
 	copy(mwsCopy, b.middlewares)
 	b.mu.RUnlock()
 
+	//將複製的每個元素呼叫 Sub 這個發法
 	finalHandler := func(e T) error {
 		for _, h := range handlersCopy {
 			if err := h.Sub(e); err != nil {

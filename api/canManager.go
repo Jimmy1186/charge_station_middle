@@ -29,12 +29,20 @@ func (m *CANManager) Add(stationId, ip , port string, service *pub.StationServic
 	return  client
 }
 
-func (m *CANManager) GetAllClient()(map[string] *CANClient){
-	return  m.client
+func (m *CANManager) GetAllClient() map[string]*CANClient {
+    m.mu.RLock()
+    defer m.mu.RUnlock()
+
+    copy := make(map[string]*CANClient)
+    for k, v := range m.client {
+        copy[k] = v
+    }
+    return copy
 }
 
+
 func (m *CANManager) Get(stationId string) (*CANClient, bool){
-	m.mu.RLocker()
+	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	c, ok := m.client[stationId]

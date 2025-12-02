@@ -4,7 +4,6 @@ package sub
 
 
 type Subs struct {
-	StationEventHandler  *StationEventHandler;
 	MqttSub * MQTTEventSub;
-	// ... 其他 handlers
+	// ... 其他 main sub
 }

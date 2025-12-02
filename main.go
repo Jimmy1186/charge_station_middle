@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"kenmec/jimmy/charge_core/api"
+	"kenmec/jimmy/charge_core/eventbusV2/events"
 	bus "kenmec/jimmy/charge_core/eventbusV2/manager"
 	"kenmec/jimmy/charge_core/eventbusV2/pub"
 	"kenmec/jimmy/charge_core/eventbusV2/sub"
@@ -27,17 +29,35 @@ func main() {
 	can2.WaitForConnection()
 
 	// 每個 station 可以獨立接 MQTT（如果你要）
-	mqtt := api.NewMQTTClient(canManager.GetAllClient(), stationService)
+	mqtt := api.NewMQTTClient(stationService)
 	mqtt.Subscribe("charge_station/+/command")
 
-	// Handlers 註冊
-	h := &sub.Subs{
-		StationEventHandler: &sub.StationEventHandler{},
+	
+
+	// Handlers 註冊  這邊只是集中訂閱者的資料
+	mainStringSubs := &sub.Subs{
 		MqttSub:             sub.NewMQTTEventSub(mqtt),
 	}
 
-	busManager.RegisterSubscribers(h.StationEventHandler)
-	busManager.RegisterSubscribers(h.MqttSub)
+
+	// busManager.StationEventBus.Subscribe(bus.FuncSub[events.StationStatus](func(e events.StationStatus) error {
+	// 	// fmt.Println("Station:", e)
+	// 	return nil
+	// }))
+
+	busManager.QamsCommandBus.Subscribe(bus.FuncSub[events.QamsCommand](func(e events.QamsCommand) error {
+	    targetCan, ok:= canManager.Get(e.StationId)
+		if ok == false {
+			return fmt.Errorf("not found station")
+		}
+
+		targetCan.SendCommand(e.Cmd)
+		return nil
+	}))
+	
+
+    busManager.StationEventBus.Subscribe(mainStringSubs.MqttSub)
+	
 	busManager.RegisterMiddlewares()
 
 	select {}

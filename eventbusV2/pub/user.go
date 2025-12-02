@@ -32,10 +32,11 @@ func (s *StationService) PubStationStatus(payload events.StationStatus ) {
 }
 
 
-// func(s *StationService) PubQamsCommand(payload events.QamsCommand){
+func(s *StationService) PubQamsCommand(statingId string, payload events.QamsCommand){
 
-// 	s.busManager.QamsCommandEventBus.PublishAsync(events.QamsCommand{
-// 		Cmd: payload.Cmd,
-// 	})
+	s.busManager.QamsCommandBus.PublishAsync(events.QamsCommand{
+		StationId: statingId,
+		Cmd: payload.Cmd,
+	})
 
-// }
+}
