@@ -4,13 +4,10 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"net"
-	"time"
-
-	"kenmec/jimmy/charge_core/eventbusV2/events"
-	"kenmec/jimmy/charge_core/eventbusV2/pub"
 	klog "kenmec/jimmy/charge_core/log"
 	"kenmec/jimmy/charge_core/tool"
+	"net"
+	"time"
 )
 
 type CANClient struct {
@@ -23,10 +20,9 @@ type CANClient struct {
 	isReady    chan struct{}
     intervalStop chan struct {}
 
-    stationService *pub.StationService
 }
 
-func NewCANClient(stationId string, ip string, port string, stationService *pub.StationService) *CANClient {
+func NewCANClient(stationId string, ip string, port string) *CANClient {
     ctx, cancel := context.WithCancel(context.Background())
 
     client := &CANClient{
@@ -36,7 +32,6 @@ func NewCANClient(stationId string, ip string, port string, stationService *pub.
         ctx:        ctx,
         cancel:     cancel,
 		isReady:    make(chan struct{}), 
-        stationService: stationService,
     }
 
     go client.run() // main control goroutine
@@ -139,15 +134,10 @@ func (c *CANClient) handlePacket(pkt []byte) {
 	// 	pkt[0], pkt[3], pkt[4], pkt[5],
 	// )
 
-    payload := events.StationStatus{
-        StationID: fmt.Sprintf("%d", pkt[0]),
-        Status:    fmt.Sprintf("%08b", pkt[3]),
-        Error:     fmt.Sprintf("%08b", pkt[4]),
-        Other:     fmt.Sprintf("%08b", pkt[5]),
-    }
+
 
     //送到event bus
-    c.stationService.PubStationStatus(payload)
+  
 
 }
 

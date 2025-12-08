@@ -1,7 +1,6 @@
 package api
 
 import (
-	"kenmec/jimmy/charge_core/eventbusV2/pub"
 	"sync"
 )
 
@@ -20,12 +19,14 @@ func NewCANManager() *CANManager {
 
 
 
-func (m *CANManager) Add(stationId, ip , port string, service *pub.StationService) *CANClient{
+func (m *CANManager) Add(stationId, ip , port string) *CANClient{
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	client := NewCANClient(stationId,ip,port , service)
+	client := NewCANClient(stationId,ip,port)
 	m.client[stationId] = client
+
+	client.WaitForConnection()
 	return  client
 }
 

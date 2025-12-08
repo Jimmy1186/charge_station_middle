@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"kenmec/jimmy/charge_core/eventbusV2/events"
-	"kenmec/jimmy/charge_core/eventbusV2/pub"
 	klog "kenmec/jimmy/charge_core/log"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -15,11 +13,7 @@ import (
 
 type  MQTT_Client struct {
 	client  mqtt.Client
-
-
 	configs MQTT_Config
-
-	stationService *pub.StationService
 }
 
 type MQTT_Config struct {
@@ -33,7 +27,7 @@ type MQTT_Config struct {
 }
 
 
-func NewMQTTClient( stationService *pub.StationService) *MQTT_Client{
+func NewMQTTClient() *MQTT_Client{
 
 	configs := MQTT_Config{
 		broker: "tcp://localhost:1883",
@@ -79,10 +73,7 @@ func NewMQTTClient( stationService *pub.StationService) *MQTT_Client{
 
 	return &MQTT_Client{
 		client: client,
-
 		configs: configs,
-
-		stationService: stationService,
 	}
 
 }
@@ -107,12 +98,8 @@ func (m *MQTT_Client) Subscribe(topic string) {
 		
 			klog.Logger.Info(fmt.Sprintf("📩 MQTT 收到給 [%s] 的命令: %s", stationId, payload))
 
-			pubData := events.QamsCommand{
-				Cmd: payload,
-			}
-
 			//送到eventbus
-			m.stationService.PubQamsCommand(stationId, pubData)
+		
         })
 
     token.Wait()
@@ -128,7 +115,7 @@ func (m *MQTT_Client) Subscribe(topic string) {
 
 
 
-func (m *MQTT_Client) PublishStatus(s events.StationStatus) {
+func (m *MQTT_Client) PublishStatus(s any) {
     payload, _ := json.Marshal(s)
 
     token := m.client.Publish(m.configs.statusTopic, 0, false, payload)
