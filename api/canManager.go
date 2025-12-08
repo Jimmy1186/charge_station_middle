@@ -1,48 +1,44 @@
 package api
 
 import (
+	eventbus "kenmec/jimmy/charge_core/infra"
 	"sync"
 )
 
-
 type CANManager struct {
-	mu sync.RWMutex
-	client map[string] *CANClient
+	mu     sync.RWMutex
+	client map[string]*CANClient
 }
 
-
 func NewCANManager() *CANManager {
-	return  &CANManager{
+	return &CANManager{
 		client: make(map[string]*CANClient),
 	}
 }
 
-
-
-func (m *CANManager) Add(stationId, ip , port string) *CANClient{
+func (m *CANManager) Add(stationId, ip, port string, eb *eventbus.EventBus) *CANClient {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	client := NewCANClient(stationId,ip,port)
+	client := NewCANClient(stationId, ip, port, eb)
 	m.client[stationId] = client
 
 	client.WaitForConnection()
-	return  client
+	return client
 }
 
 func (m *CANManager) GetAllClient() map[string]*CANClient {
-    m.mu.RLock()
-    defer m.mu.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
-    copy := make(map[string]*CANClient)
-    for k, v := range m.client {
-        copy[k] = v
-    }
-    return copy
+	copy := make(map[string]*CANClient)
+	for k, v := range m.client {
+		copy[k] = v
+	}
+	return copy
 }
 
-
-func (m *CANManager) Get(stationId string) (*CANClient, bool){
+func (m *CANManager) Get(stationId string) (*CANClient, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -50,7 +46,7 @@ func (m *CANManager) Get(stationId string) (*CANClient, bool){
 	return c, ok
 }
 
-func (m *CANManager) Remove(stationId string){
+func (m *CANManager) Remove(stationId string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

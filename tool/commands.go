@@ -3,46 +3,48 @@ package tool
 import (
 	"encoding/hex"
 	"fmt"
-
-	"github.com/sigurn/crc16"
+	"log"
 )
 
+func Command(stationId, cmd string) ([]byte, error) {
 
-func Command(stationId, cmd string) (string, error) {
-	
 	switch cmd {
 	case "start":
-		return buildCommand(stationId, "050007FF00")
+		return buildCommand(stationId, "00000000000001")
 	case "stop":
-		return buildCommand(stationId, "0500070000")
-	case "read":
-		return buildCommand(stationId, "01004000")
+		return buildCommand(stationId, "00000000000000")
+	//  case "read":
+	//  	return buildCommand(stationId, "00000000000077")
 	default:
-		return "", fmt.Errorf("unknown cmd")
+		return []byte{}, fmt.Errorf("unknown cmd")
 	}
 }
 
+func buildCommand(stationId, payload string) ([]byte, error) {
+	const startBuffer string = "00000800000f00"
 
+	bufferedStr, err := hex.DecodeString(startBuffer + stationId + payload)
 
-var table = crc16.MakeTable(crc16.CRC16_MODBUS)
+	if err != nil {
+		log.Fatal("字串解析失敗，請確保字串長度為偶數且只包含 0-9, a-f:", err)
+		return nil, err
+	}
 
-func buildCommand(stationId, payload string) (string, error) {
-    fullStr := stationId + payload
+	checksum := calculateChecksum(bufferedStr)
 
-    // 轉 []byte
-    data, err := hex.DecodeString(fullStr)
-    if err != nil {
-        return "", fmt.Errorf("hex decode failed: %v", err)
-    }
+	//fmt.Println(checksum, "check sum")
+	bufferedStr = append(bufferedStr, checksum)
 
-    // 計算 CRC16-MODBUS
-    crcValue := crc16.Checksum(data, table)
+	return bufferedStr, nil
 
-    // 轉成大寫 HEX（4 字碼）
-    crcHex := fmt.Sprintf("%04X", crcValue)
+}
 
-    // Little endian：低位在前
-    crcLE := crcHex[2:4] + crcHex[0:2]
-
-    return fullStr + crcLE, nil
+func calculateChecksum(data []byte) byte {
+	var sum int
+	// 遍歷前 15 個位元組
+	for i := 0; i < 15; i++ {
+		sum += int(data[i])
+	}
+	// 取得低 8 位 (Low 8 bits)
+	return byte(sum & 0xFF)
 }
