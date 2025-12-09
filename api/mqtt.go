@@ -58,34 +58,34 @@ func NewMQTTClient(eb *eventbus.EventBus, reqEb *eventbus.RequestResponseBus, cf
 	})
 
 	opts.SetOnConnectHandler(func(cli mqtt.Client) {
-    klog.Logger.Info("🔌 MQTT 已連線 / 已重新連線成功")
+		klog.Logger.Info("🔌 MQTT 已連線 / 已重新連線成功")
 
-    for _, v := range cfg.Stations {
-        reqName := "tcp." + v.ID + ".status"
+		for _, v := range cfg.Stations {
+			reqName := "tcp." + v.ID + ".status"
 
-        // Check if handler exists before requesting
-        if !reqEb.HasHandler(reqName) {
-            klog.Logger.Warn(fmt.Sprintf("⚠️ Handler %s not ready yet, skipping status check", reqName))
-            continue
-        }
+			// Check if handler exists before requesting
+			if !reqEb.HasHandler(reqName) {
+				klog.Logger.Warn(fmt.Sprintf("⚠️ Handler %s not ready yet, skipping status check", reqName))
+				continue
+			}
 
-        response, err := reqEb.Request(reqName, types.ReqTCPStatus{})
-        if err != nil {
-            klog.Logger.Error(fmt.Sprintf("❌ Failed to get TCP status: %v", err))
-            continue
-        }
-        data := response.Data.(types.ResTCPStatus)
-        m.pubTpc(v.ID, data.IsConnect)
-    }
+			response, err := reqEb.Request(reqName, types.ReqTCPStatus{})
+			if err != nil {
+				klog.Logger.Error(fmt.Sprintf("❌ Failed to get TCP status: %v", err))
+				continue
+			}
+			data := response.Data.(types.ResTCPStatus)
+			m.pubTpc(v.ID, data.IsConnect)
+		}
 
-    // Subscribe to topics...
-    if len(m.configs.subscribeTopic) != 0 {
-        for _, v := range m.configs.subscribeTopic {
-            m.Subscribe(v)
-            klog.Logger.Info("🔄 已自動重新訂閱主題: " + v)
-        }
-    }
-})
+		// Subscribe to topics...
+		if len(m.configs.subscribeTopic) != 0 {
+			for _, v := range m.configs.subscribeTopic {
+				m.Subscribe(v)
+				klog.Logger.Info("🔄 已自動重新訂閱主題: " + v)
+			}
+		}
+	})
 
 	m.client = mqtt.NewClient(opts)
 
@@ -101,6 +101,7 @@ func NewMQTTClient(eb *eventbus.EventBus, reqEb *eventbus.RequestResponseBus, cf
 	}
 
 	go m.subEb()
+	go m.heartBeat()
 	return m
 }
 
@@ -196,4 +197,17 @@ func (m *MQTT_Client) pubTpc(stationId string, isConnect bool) {
 		klog.Logger.Error(fmt.Sprintf("❌ Publish to topic [%s] failed: %v", "charge_station/connection/tcp", token.Error()))
 	}
 
+}
+
+func (m *MQTT_Client) heartBeat() {
+	i := 0
+	for range time.Tick(time.Second * 6) {
+
+		token := m.client.Publish("charge_station/heartbeat", 0, true, string(i))
+		token.Wait()
+		if token.Error() != nil {
+			klog.Logger.Error(fmt.Sprintf("❌ Publish to topic [%s] failed: %v", "charge_station/heartbeat", token.Error()))
+		}
+		i++
+	}
 }
