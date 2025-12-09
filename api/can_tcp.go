@@ -225,6 +225,10 @@ func (c *CANClient) sub() {
 	c.eb.Subscribe("qams.command", func(data interface{}) {
 		cmd := data.(types.QamsCommand)
 
+		if(cmd.StationId != c.stationId) {
+			return
+		}
+
 		c.SendCommand(cmd.Cmd)
 	})
 }
