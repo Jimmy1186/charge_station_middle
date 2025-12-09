@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"kenmec/jimmy/charge_core/infra"
 	eventbus "kenmec/jimmy/charge_core/infra"
 	klog "kenmec/jimmy/charge_core/log"
 	"kenmec/jimmy/charge_core/tool"
@@ -14,6 +15,7 @@ import (
 
 type CANClient struct {
 	stationId    string
+	isConnect    bool
 	conn         net.Conn
 	addr         string
 	writeQueue   chan []byte
@@ -22,19 +24,22 @@ type CANClient struct {
 	isReady      chan struct{}
 	intervalStop chan struct{}
 	eb           *eventbus.EventBus
+	reqEb        *eventbus.RequestResponseBus
 }
 
-func NewCANClient(stationId string, ip string, port string, eb *eventbus.EventBus) *CANClient {
+func NewCANClient(stationId string, ip string, port string, eb *eventbus.EventBus, reqEb *eventbus.RequestResponseBus) *CANClient {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client := &CANClient{
 		stationId:  stationId,
+		isConnect:  false,
 		addr:       net.JoinHostPort(ip, port),
 		writeQueue: make(chan []byte, 100), // buffered channel
 		ctx:        ctx,
 		cancel:     cancel,
 		isReady:    make(chan struct{}),
 		eb:         eb,
+		reqEb:      reqEb,
 	}
 
 	go client.run() // main control goroutine
@@ -47,6 +52,12 @@ func (c *CANClient) run() {
 		err := c.connect()
 		if err != nil {
 
+			c.eb.Publish("connection.tcp", types.ConnectionTcp{
+				StationId: c.stationId,
+				IsConnect: false,
+				Msg:       err.Error(),
+			})
+			c.isConnect = false
 			klog.Logger.Error("Reconnect in 3 seconds...")
 			klog.Logger.Error(fmt.Sprintf("can connect error: %e", err))
 			time.Sleep(3 * time.Second)
@@ -55,7 +66,7 @@ func (c *CANClient) run() {
 
 		// ---- 連線成功就啟動 interval ----
 		// c.startInterval()
-
+		c.isConnect = true
 		readDone := make(chan struct{})
 		go c.readLoop(readDone)
 		go c.sub()
@@ -63,12 +74,12 @@ func (c *CANClient) run() {
 		select {
 		case <-readDone:
 			klog.Logger.Info("Connection lost, reconnecting...")
-			c.stopInterval() // <-- 斷線必須停掉 interval
+			//	c.stopInterval() // <-- 斷線必須停掉 interval
 			c.conn.Close()
 
 		case <-c.ctx.Done():
 			klog.Logger.Info("Shutting down CAN client...")
-			c.stopInterval() // <-- 關閉也必須停掉 interval
+			//c.stopInterval() // <-- 關閉也必須停掉 interval
 			c.conn.Close()
 			return
 		}
@@ -82,11 +93,22 @@ func (c *CANClient) connect() error {
 	conn, err := net.Dial("tcp", c.addr)
 	if err != nil {
 		klog.Logger.Error(fmt.Sprintf("Dial failed: %v", err))
+		c.isConnect = false
+		c.eb.Publish("connection.tcp", types.ConnectionTcp{
+			StationId: c.stationId,
+			IsConnect: false,
+			Msg:       err.Error(),
+		})
 
 		return err
 	}
-	c.conn = conn
 
+	c.conn = conn
+	c.eb.Publish("connection.tcp", types.ConnectionTcp{
+		StationId: c.stationId,
+		IsConnect: true,
+		Msg:       "",
+	})
 	// 處理連線就緒通知 (保持您先前新增的邏輯)
 	select {
 	case <-c.isReady:
@@ -225,10 +247,23 @@ func (c *CANClient) sub() {
 	c.eb.Subscribe("qams.command", func(data interface{}) {
 		cmd := data.(types.QamsCommand)
 
-		if(cmd.StationId != c.stationId) {
+		if cmd.StationId != c.stationId {
 			return
 		}
 
 		c.SendCommand(cmd.Cmd)
 	})
+
+	reqName := "tcp." + c.stationId + ".status"
+
+	c.reqEb.RegisterHandler(reqName, infra.TypedRequestHandler(
+		func(ctx context.Context, req types.ReqTCPStatus) (types.ResTCPStatus, error) {
+
+			return types.ResTCPStatus{
+				StationId: c.stationId,
+				IsConnect: c.isConnect,
+			}, nil
+		},
+	))
+
 }

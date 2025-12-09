@@ -16,11 +16,11 @@ func NewCANManager() *CANManager {
 	}
 }
 
-func (m *CANManager) Add(stationId, ip, port string, eb *eventbus.EventBus) *CANClient {
+func (m *CANManager) Add(stationId, ip, port string, eb *eventbus.EventBus, reqEb *eventbus.RequestResponseBus) *CANClient {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	client := NewCANClient(stationId, ip, port, eb)
+	client := NewCANClient(stationId, ip, port, eb, reqEb)
 	m.client[stationId] = client
 
 	client.WaitForConnection()

@@ -1,3 +1,11 @@
 {
-  "cSpell.words": ["eventbus", "kenmec", "klog", "mapstructure", "mqtt", "QAMS"]
+  "cSpell.words": [
+    "eventbus",
+    "kenmec",
+    "klog",
+    "mapstructure",
+    "mqtt",
+    "QAMS",
+    "reqbus"
+  ]
 }

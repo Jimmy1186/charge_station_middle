@@ -1,10 +1,12 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"kenmec/jimmy/charge_core/config"
 	eventbus "kenmec/jimmy/charge_core/infra"
 	klog "kenmec/jimmy/charge_core/log"
 	"kenmec/jimmy/charge_core/types"
@@ -16,6 +18,7 @@ type MQTT_Client struct {
 	client  mqtt.Client
 	configs MQTT_Config
 	eb      *eventbus.EventBus
+	reqEb   *eventbus.RequestResponseBus
 }
 
 type MQTT_Config struct {
@@ -28,7 +31,7 @@ type MQTT_Config struct {
 	subscribeTopic []string
 }
 
-func NewMQTTClient(eb *eventbus.EventBus) *MQTT_Client {
+func NewMQTTClient(eb *eventbus.EventBus, reqEb *eventbus.RequestResponseBus, cfg *config.Config) *MQTT_Client {
 
 	configs := MQTT_Config{
 		broker:         "tcp://localhost:1883",
@@ -37,7 +40,7 @@ func NewMQTTClient(eb *eventbus.EventBus) *MQTT_Client {
 		password:       "admin",
 		subscribeTopic: []string{"charge_station/+/command"},
 	}
-	m := &MQTT_Client{eb: eb, configs: configs}
+	m := &MQTT_Client{eb: eb, reqEb: reqEb, configs: configs}
 
 	opts := mqtt.NewClientOptions()
 
@@ -55,16 +58,34 @@ func NewMQTTClient(eb *eventbus.EventBus) *MQTT_Client {
 	})
 
 	opts.SetOnConnectHandler(func(cli mqtt.Client) {
-		klog.Logger.Info("🔌 MQTT 已連線 / 已重新連線成功")
+    klog.Logger.Info("🔌 MQTT 已連線 / 已重新連線成功")
 
-		// 如果之前有訂閱過主題，重連後要補訂閱
-		if len(m.configs.subscribeTopic) != 0 {
-			for _, v := range m.configs.subscribeTopic {
-				m.Subscribe(v)
-				klog.Logger.Info("🔄 已自動重新訂閱主題: " + v)
-			}
-		}
-	})
+    for _, v := range cfg.Stations {
+        reqName := "tcp." + v.ID + ".status"
+
+        // Check if handler exists before requesting
+        if !reqEb.HasHandler(reqName) {
+            klog.Logger.Warn(fmt.Sprintf("⚠️ Handler %s not ready yet, skipping status check", reqName))
+            continue
+        }
+
+        response, err := reqEb.Request(reqName, types.ReqTCPStatus{})
+        if err != nil {
+            klog.Logger.Error(fmt.Sprintf("❌ Failed to get TCP status: %v", err))
+            continue
+        }
+        data := response.Data.(types.ResTCPStatus)
+        m.pubTpc(v.ID, data.IsConnect)
+    }
+
+    // Subscribe to topics...
+    if len(m.configs.subscribeTopic) != 0 {
+        for _, v := range m.configs.subscribeTopic {
+            m.Subscribe(v)
+            klog.Logger.Info("🔄 已自動重新訂閱主題: " + v)
+        }
+    }
+})
 
 	m.client = mqtt.NewClient(opts)
 
@@ -79,6 +100,7 @@ func NewMQTTClient(eb *eventbus.EventBus) *MQTT_Client {
 
 	}
 
+	go m.subEb()
 	return m
 }
 
@@ -116,5 +138,62 @@ func (m *MQTT_Client) Subscribe(topic string) {
 		return
 	}
 	klog.Logger.Info(fmt.Sprintf("✅ 成功訂閱主題: %s", topic))
+
+}
+
+func (m *MQTT_Client) subEb() {
+	m.eb.Subscribe("connection.tcp", func(data interface{}) {
+		d := data.(types.ConnectionTcp)
+
+		pubData := types.ConnectionTcp{
+			StationId: d.StationId,
+			IsConnect: d.IsConnect,
+			Msg:       d.Msg,
+		}
+
+		payload, err := json.Marshal(pubData)
+
+		if err != nil {
+			klog.Logger.Error(fmt.Sprintf("❌ Failed to marshal JSON payload: %v", err))
+			return // Stop publish on error
+		}
+
+		klog.Logger.Info(fmt.Sprintf(`MQTT Send to QAMS is connect: %v, msg: %s`, d.IsConnect, d.Msg))
+
+		prefixTopic := "charge_station/" + d.StationId + "/connection/tcp"
+
+		token := m.client.Publish(prefixTopic, 0, true, payload)
+
+		token.Wait()
+		if token.Error() != nil {
+			klog.Logger.Error(fmt.Sprintf("❌ Publish to topic [%s] failed: %v", "charge_station/connection/tcp", token.Error()))
+		}
+	})
+}
+
+func (m *MQTT_Client) pubTpc(stationId string, isConnect bool) {
+
+	pubData := types.ConnectionTcp{
+		StationId: stationId,
+		IsConnect: isConnect,
+		Msg:       "",
+	}
+
+	payload, err := json.Marshal(pubData)
+
+	if err != nil {
+		klog.Logger.Error(fmt.Sprintf("❌ Failed to marshal JSON payload: %v", err))
+		return // Stop publish on error
+	}
+
+	klog.Logger.Info(fmt.Sprintf(`MQTT Send to QAMS is connect: %v`, isConnect))
+
+	prefixTopic := "charge_station/" + stationId + "/connection/tcp"
+
+	token := m.client.Publish(prefixTopic, 0, true, payload)
+	token.Wait()
+	if token.Error() != nil {
+		klog.Logger.Error(fmt.Sprintf("❌ Publish to topic [%s] failed: %v", "charge_station/connection/tcp", token.Error()))
+	}
 
 }

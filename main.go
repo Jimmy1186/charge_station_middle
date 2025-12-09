@@ -16,19 +16,18 @@ func main() {
 	}
 
 	eb := eventbus.New()
+	reqbus := eventbus.NewReqBus()
+
+
+	api.NewMQTTClient(eb, reqbus, cfg)
 
 	// ⭐ 建立 CANManager
 	canManager := api.NewCANManager()
-	// ⭐ 設定多個站
-
-
-	for _,v := range cfg.Stations{
-		canManager.Add(v.ID, v.IP, v.Port, eb)
+	
+// ⭐ 設定多個站
+	for _, v := range cfg.Stations {
+		canManager.Add(v.ID, v.IP, v.Port, eb, reqbus)
 	}
-
-	// 每個 station 可以獨立接 MQTT（如果你要）
-	api.NewMQTTClient(eb)
-
 
 	select {}
 }
